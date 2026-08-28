@@ -1,0 +1,62 @@
+# Production override. Adds nginx + TLS, swaps the storefront to a compiled
+# build, and stops exposing WordPress and the database on public ports.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+
+services:
+  cms:
+    ports: !override []
+    environment:
+      WORDPRESS_CONFIG_EXTRA: |
+        define( 'WP_HOME', 'https://cms.${SITE_DOMAIN}' );
+        define( 'WP_SITEURL', 'https://cms.${SITE_DOMAIN}' );
+        define( 'STF_WEB_URL', 'https://${SITE_DOMAIN}' );
+        define( 'WP_MEMORY_LIMIT', '512M' );
+        define( 'FORCE_SSL_ADMIN', true );
+        define( 'DISALLOW_FILE_EDIT', true );
+        if ( ! empty( $$_SERVER['HTTP_X_FORWARDED_PROTO'] ) && $$_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https' ) {
+          $$_SERVER['HTTPS'] = 'on';
+        }
+
+  web:
+    build:
+      target: runner
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_SITE_URL: https://${SITE_DOMAIN}
+      NEXT_PUBLIC_CMS_URL: https://cms.${SITE_DOMAIN}
+    volumes: !override []
+    ports: !override []
+
+  mail:
+    ports: !override []
+
+  proxy:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    depends_on: [web, cms]
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      SITE_DOMAIN: ${SITE_DOMAIN}
+    volumes:
+      - ./nginx/site.conf.template:/etc/nginx/templates/site.conf.template:ro
+      - certbot_conf:/etc/letsencrypt
+      - certbot_www:/var/www/certbot
+
+  certbot:
+    image: certbot/certbot:latest
+    restart: unless-stopped
+    volumes:
+      - certbot_conf:/etc/letsencrypt
+      - certbot_www:/var/www/certbot
+    # Renew twice a day; nginx picks up new certs on its own reload cycle.
+    entrypoint: >
+      sh -c "trap exit TERM;
+             while :; do certbot renew --webroot -w /var/www/certbot --quiet;
+             sleep 12h & wait $${!}; done"
+
+volumes:
+  certbot_conf:
+  certbot_www:

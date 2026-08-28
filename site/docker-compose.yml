@@ -1,0 +1,138 @@
+# Shirt That's Funny — development stack.
+#   docker compose up -d          → storefront on :3000, Woo admin on :8080
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d   → production
+name: shirtthatsfunny
+
+services:
+  # ── MariaDB ───────────────────────────────────────────────────────────────
+  db:
+    image: mariadb:11.4
+    restart: unless-stopped
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --max_allowed_packet=64M
+    environment:
+      MARIADB_DATABASE: ${MYSQL_DATABASE}
+      MARIADB_USER: ${MYSQL_USER}
+      MARIADB_PASSWORD: ${MYSQL_PASSWORD}
+      MARIADB_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+    volumes:
+      - db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+  # ── WordPress + WooCommerce ───────────────────────────────────────────────
+  cms:
+    build:
+      context: ./wordpress
+      # Without this Docker builds the LAST stage in the Dockerfile, which is
+      # the wp-cli image, and Apache never starts.
+      target: cms
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      WORDPRESS_DB_HOST: db:3306
+      WORDPRESS_DB_NAME: ${MYSQL_DATABASE}
+      WORDPRESS_DB_USER: ${MYSQL_USER}
+      WORDPRESS_DB_PASSWORD: ${MYSQL_PASSWORD}
+      WORDPRESS_CONFIG_EXTRA: |
+        define( 'WP_HOME', '${PUBLIC_CMS_URL}' );
+        define( 'WP_SITEURL', '${PUBLIC_CMS_URL}' );
+        define( 'STF_WEB_URL', '${PUBLIC_WEB_URL}' );
+        define( 'WP_MEMORY_LIMIT', '512M' );
+        define( 'DISABLE_WP_CRON', false );
+        if ( ! empty( $$_SERVER['HTTP_X_FORWARDED_PROTO'] ) && $$_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https' ) {
+          $$_SERVER['HTTPS'] = 'on';
+        }
+    volumes:
+      - wp_data:/var/www/html
+      - ./wordpress/mu-plugins:/var/www/html/wp-content/mu-plugins:ro
+    ports:
+      - "${CMS_PORT:-8080}:80"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://localhost/wp-includes/js/wp-embed.min.js"]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+      start_period: 20s
+
+  # ── One-shot: install WP, WooCommerce, attributes, products, coupons ──────
+  bootstrap:
+    build:
+      context: ./wordpress
+      target: wpcli
+    depends_on:
+      cms:
+        condition: service_healthy
+    environment:
+      WORDPRESS_DB_HOST: db:3306
+      WORDPRESS_DB_NAME: ${MYSQL_DATABASE}
+      WORDPRESS_DB_USER: ${MYSQL_USER}
+      WORDPRESS_DB_PASSWORD: ${MYSQL_PASSWORD}
+      SITE_TITLE: ${SITE_TITLE}
+      PUBLIC_CMS_URL: ${PUBLIC_CMS_URL}
+      PUBLIC_WEB_URL: ${PUBLIC_WEB_URL}
+      WP_ADMIN_USER: ${WP_ADMIN_USER}
+      WP_ADMIN_PASSWORD: ${WP_ADMIN_PASSWORD}
+      WP_ADMIN_EMAIL: ${WP_ADMIN_EMAIL}
+      WC_CONSUMER_KEY: ${WC_CONSUMER_KEY}
+      WC_CONSUMER_SECRET: ${WC_CONSUMER_SECRET}
+      EXIT_COUPON: ${NEXT_PUBLIC_EXIT_COUPON}
+      FREE_SHIPPING_THRESHOLD: ${NEXT_PUBLIC_FREE_SHIPPING_THRESHOLD}
+    volumes:
+      - wp_data:/var/www/html
+      - ./scripts:/scripts:ro
+    user: "33:33"
+    command: ["bash", "/scripts/bootstrap.sh"]
+    restart: "no"
+
+  # ── Next.js storefront ────────────────────────────────────────────────────
+  web:
+    build:
+      context: ./web
+      target: dev
+    restart: unless-stopped
+    depends_on:
+      cms:
+        condition: service_healthy
+    environment:
+      NODE_ENV: development
+      WC_API_URL: http://cms/wp-json
+      WC_CONSUMER_KEY: ${WC_CONSUMER_KEY}
+      WC_CONSUMER_SECRET: ${WC_CONSUMER_SECRET}
+      SESSION_SECRET: ${SESSION_SECRET}
+      NEXT_PUBLIC_SITE_URL: ${PUBLIC_WEB_URL}
+      NEXT_PUBLIC_CMS_URL: ${PUBLIC_CMS_URL}
+      NEXT_PUBLIC_SITE_TITLE: ${SITE_TITLE}
+      NEXT_PUBLIC_EXIT_COUPON: ${NEXT_PUBLIC_EXIT_COUPON}
+      NEXT_PUBLIC_FREE_SHIPPING_THRESHOLD: ${NEXT_PUBLIC_FREE_SHIPPING_THRESHOLD}
+    volumes:
+      - ./web/src:/app/src
+      - ./web/public:/app/public
+      - ./web/next.config.mjs:/app/next.config.mjs
+      - ./web/tsconfig.json:/app/tsconfig.json
+      - web_next:/app/.next
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+
+  # ── Catches all outbound mail in dev (order confirmations, etc.) ──────────
+  mail:
+    image: axllent/mailpit:latest
+    restart: unless-stopped
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: 1
+      MP_SMTP_AUTH_ALLOW_INSECURE: 1
+    ports:
+      - "${MAILPIT_PORT:-8025}:8025"
+
+volumes:
+  db_data:
+  wp_data:
+  web_next:

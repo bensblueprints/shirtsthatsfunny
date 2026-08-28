@@ -1,0 +1,57 @@
+# Hetzner override.
+#
+# That box already runs a host-level nginx on :80/:443 in front of six other
+# projects, and every app there binds a high port on 127.0.0.1 and gets
+# reverse-proxied. So this override deliberately does NOT bring its own nginx
+# or certbot — it follows the house style instead:
+#
+#   web  -> 127.0.0.1:34000
+#   cms  -> 127.0.0.1:34080
+#   mail -> 127.0.0.1:34025
+#
+# TLS is issued by the host's existing certbot. See nginx/shirtthatsfunny.host.conf
+#
+#   docker compose -f docker-compose.yml -f docker-compose.hetzner.yml up -d --build
+
+services:
+  cms:
+    ports: !override
+      - "127.0.0.1:34080:80"
+    environment:
+      WORDPRESS_DB_HOST: db:3306
+      WORDPRESS_DB_NAME: ${MYSQL_DATABASE}
+      WORDPRESS_DB_USER: ${MYSQL_USER}
+      WORDPRESS_DB_PASSWORD: ${MYSQL_PASSWORD}
+      WORDPRESS_CONFIG_EXTRA: |
+        define( 'WP_HOME', '${PUBLIC_CMS_URL}' );
+        define( 'WP_SITEURL', '${PUBLIC_CMS_URL}' );
+        define( 'STF_WEB_URL', '${PUBLIC_WEB_URL}' );
+        define( 'WP_MEMORY_LIMIT', '512M' );
+        define( 'FORCE_SSL_ADMIN', true );
+        define( 'DISALLOW_FILE_EDIT', true );
+        if ( ! empty( $$_SERVER['HTTP_X_FORWARDED_PROTO'] ) && $$_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https' ) {
+          $$_SERVER['HTTPS'] = 'on';
+        }
+
+  web:
+    build:
+      target: runner
+    environment:
+      NODE_ENV: production
+      WC_API_URL: http://cms/wp-json
+      WC_CONSUMER_KEY: ${WC_CONSUMER_KEY}
+      WC_CONSUMER_SECRET: ${WC_CONSUMER_SECRET}
+      SESSION_SECRET: ${SESSION_SECRET}
+      NEXT_PUBLIC_SITE_URL: ${PUBLIC_WEB_URL}
+      NEXT_PUBLIC_CMS_URL: ${PUBLIC_CMS_URL}
+      NEXT_PUBLIC_SITE_TITLE: ${SITE_TITLE}
+      NEXT_PUBLIC_EXIT_COUPON: ${NEXT_PUBLIC_EXIT_COUPON}
+      NEXT_PUBLIC_FREE_SHIPPING_THRESHOLD: ${NEXT_PUBLIC_FREE_SHIPPING_THRESHOLD}
+    # No source bind-mounts in production — the image is the artefact.
+    volumes: !override []
+    ports: !override
+      - "127.0.0.1:34000:3000"
+
+  mail:
+    ports: !override
+      - "127.0.0.1:34025:8025"
