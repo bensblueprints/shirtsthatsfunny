@@ -106,6 +106,14 @@ export default function Footer() {
             © {new Date().getFullYear()} Shirt That&rsquo;s Funny · Wilmington, DE
           </p>
           <div className="flex items-center gap-8">
+            <a
+              href={`${process.env.NEXT_PUBLIC_CMS_URL ?? 'https://cms.shirtthatsfunny.com'}/wp-admin`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="spec opacity-55 transition-opacity hover:opacity-100"
+            >
+              Admin
+            </a>
             <span className="spec opacity-55">5.3oz · 100% cotton</span>
             <CareSymbols />
           </div>
