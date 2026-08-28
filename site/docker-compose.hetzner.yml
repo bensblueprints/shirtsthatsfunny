@@ -36,6 +36,8 @@ services:
   web:
     build:
       target: runner
+      args:
+        NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: ${STRIPE_PUBLISHABLE_KEY}
     environment:
       NODE_ENV: production
       WC_API_URL: http://cms/wp-json
@@ -47,6 +49,7 @@ services:
       NEXT_PUBLIC_SITE_TITLE: ${SITE_TITLE}
       NEXT_PUBLIC_EXIT_COUPON: ${NEXT_PUBLIC_EXIT_COUPON}
       NEXT_PUBLIC_FREE_SHIPPING_THRESHOLD: ${NEXT_PUBLIC_FREE_SHIPPING_THRESHOLD}
+      NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: ${STRIPE_PUBLISHABLE_KEY}
     # No source bind-mounts in production — the image is the artefact.
     volumes: !override []
     ports: !override
