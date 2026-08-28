@@ -13,6 +13,10 @@ RUN mkdir -p /var/www/html/wp-content/uploads \
 
 RUN a2enmod rewrite headers remoteip
 
+# WP-CLI inside the cms container so `docker exec shirtthatsfunny-cms-1 wp --allow-root ...` works
+RUN curl -fsSL -o /usr/local/bin/wp https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar \
+ && chmod +x /usr/local/bin/wp
+
 HEALTHCHECK --interval=10s --timeout=5s --retries=12 --start-period=20s \
   CMD curl -fsS -o /dev/null http://localhost/wp-includes/js/wp-embed.min.js || exit 1
 

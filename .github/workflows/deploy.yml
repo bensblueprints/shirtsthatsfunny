@@ -1,0 +1,35 @@
+name: Deploy site to Hetzner
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'site/**'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.HETZNER_HOST }}
+          username: root
+          key: ${{ secrets.HETZNER_SSH_KEY }}
+          script: |
+            set -e
+            # Fresh clone of the public repo (no auth needed)
+            rm -rf /tmp/shirtsthatsfunny
+            git clone --depth 1 https://github.com/bensblueprints/shirtsthatsfunny.git /tmp/shirtsthatsfunny
+            # Sync site/ code into the live dir, preserving .env and heavy build dirs
+            rsync -a \
+              --exclude='.env' \
+              --exclude='.env.*' \
+              --exclude='web/node_modules' \
+              --exclude='web/.next' \
+              --exclude='wordpress/wp-content' \
+              /tmp/shirtsthatsfunny/site/ /opt/shirtthatsfunny/
+            # Rebuild + restart the stack
+            cd /opt/shirtthatsfunny
+            docker compose up -d --build
