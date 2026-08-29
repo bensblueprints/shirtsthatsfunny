@@ -5,7 +5,7 @@ import { AnimatePresence, motion } from 'motion/react';
 
 import { useCart, price, formatMoney, type CartItem } from '@/lib/cart';
 
-const THRESHOLD = Number(process.env.NEXT_PUBLIC_FREE_SHIPPING_THRESHOLD ?? 60);
+const THRESHOLD = Number(process.env.NEXT_PUBLIC_FREE_SHIPPING_THRESHOLD ?? 65);
 
 function attr(item: CartItem, name: string): string | undefined {
   return item.variation.find((v) => v.attribute.toLowerCase().includes(name))?.value;

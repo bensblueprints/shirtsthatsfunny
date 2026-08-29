@@ -88,7 +88,6 @@ export default function CheckoutPage() {
   const [note, setNote] = useState('');
   const [placing, setPlacing] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
-  const [paymentMethod, setPaymentMethod] = useState<'cod' | 'card'>('card');
   const stripeRef = useRef<Stripe | null>(null);
   const cardElementRef = useRef<StripeCardElement | null>(null);
   const cardHostRef = useRef<HTMLDivElement>(null);
@@ -121,9 +120,8 @@ export default function CheckoutPage() {
     return () => window.clearTimeout(timer);
   }, [address.country, address.state, address.postcode, address.city, updateCustomer]);
 
-  // Mount the Stripe card element once the card method is selected.
+  // Mount the Stripe card element once the checkout renders.
   useEffect(() => {
-    if (paymentMethod !== 'card') return;
     let cancelled = false;
     (async () => {
       const pk = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
@@ -145,7 +143,7 @@ export default function CheckoutPage() {
       cardElementRef.current?.unmount?.();
       cardElementRef.current = null;
     };
-  }, [paymentMethod]);
+  }, []);
 
   async function placeOrder(e: React.FormEvent) {
     e.preventDefault();
@@ -162,7 +160,7 @@ export default function CheckoutPage() {
           billing_address: billing,
           shipping_address: address,
           customer_note: note,
-          payment_method: paymentMethod,
+          payment_method: 'stripe',
           payment_data: [],
         }),
       });
@@ -179,7 +177,7 @@ export default function CheckoutPage() {
 
       // Stripe deferred intent: confirm the card client-side, then finalize.
       const cardEl = cardElementRef.current;
-      if (paymentMethod === 'card' && details.payment_intent_secret && stripeRef.current && cardEl) {
+      if (details.payment_intent_secret && stripeRef.current && cardEl) {
         const { error } = await stripeRef.current.confirmCardPayment(details.payment_intent_secret, {
           payment_method: {
             card: cardEl,
@@ -347,43 +345,15 @@ export default function CheckoutPage() {
 
           <section>
             <h2 className="spec mb-4 border-b pb-2 opacity-55">Payment</h2>
-            <ul className="space-y-2">
-              <li>
-                <label className="flex cursor-pointer items-center gap-3 border px-4 py-3.5 transition-colors hover:border-[var(--on-surface)]">
-                  <input
-                    type="radio"
-                    name="payment"
-                    checked={paymentMethod === 'card'}
-                    onChange={() => setPaymentMethod('card')}
-                    className="accent-[var(--on-surface)]"
-                  />
-                  <span className="text-sm">Credit / Debit Card</span>
-                  <span className="spec ml-auto text-[11px] opacity-45">
-                    Visa · Mastercard · Amex · Discover
-                  </span>
-                </label>
-                {paymentMethod === 'card' && (
-                  <div className="border border-t-0 px-4 py-4">
-                    <div ref={cardHostRef} style={{ minHeight: 44 }} />
-                    <p className="spec mt-2 text-[11px] opacity-45">
-                      Secured by Stripe. Card details never touch our servers.
-                    </p>
-                  </div>
-                )}
-              </li>
-              <li>
-                <label className="flex cursor-pointer items-center gap-3 border px-4 py-3.5 transition-colors hover:border-[var(--on-surface)]">
-                  <input
-                    type="radio"
-                    name="payment"
-                    checked={paymentMethod === 'cod'}
-                    onChange={() => setPaymentMethod('cod')}
-                    className="accent-[var(--on-surface)]"
-                  />
-                  <span className="text-sm">Cash on delivery</span>
-                </label>
-              </li>
-            </ul>
+            <div className="border px-4 py-4">
+              <p className="spec mb-2 text-[11px] uppercase tracking-wider opacity-55">
+                Credit / Debit Card
+              </p>
+              <div ref={cardHostRef} style={{ minHeight: 44 }} />
+              <p className="spec mt-2 text-[11px] opacity-45">
+                Secured by Stripe. Card details never touch our servers.
+              </p>
+            </div>
 
             <label htmlFor="note" className="spec mt-6 mb-1.5 block opacity-55">
               Order note (optional)

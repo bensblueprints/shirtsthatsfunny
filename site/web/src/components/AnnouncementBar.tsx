@@ -1,4 +1,4 @@
-const threshold = process.env.NEXT_PUBLIC_FREE_SHIPPING_THRESHOLD ?? '60';
+const threshold = process.env.NEXT_PUBLIC_FREE_SHIPPING_THRESHOLD ?? '65';
 
 /**
  * A print-shop crawl. The separator is a registration mark, because that's the
